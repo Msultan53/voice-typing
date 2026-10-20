@@ -124,13 +124,65 @@
     overflow-y: auto;
     white-space: pre-wrap;
   }
+
+  /* ---------- EXPERIMENT MODE ---------- */
+  body { flex-direction: column; align-items: center; gap: 20px; }
+  h2 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  .lud {                                   /* Lisan ud Dawat / Arabic-script text */
+    font-family: "Noto Naskh Arabic", system-ui, sans-serif;
+    direction: rtl;
+  }
+  #expectedText {
+    min-height: 90px;
+    font-size: 20px;
+  }
+  .test-buttons { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .test-buttons button {
+    flex: 1;
+    min-width: 120px;
+    padding: 12px;
+    font-size: 15px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+  }
+  .test-buttons button:disabled { opacity: .45; cursor: default; }
+  .test-buttons button.running { background: var(--danger); }
+  .error { color: var(--danger); font-size: 13px; min-height: 18px; margin-top: 6px; }
+  #liveHeard {
+    font-size: 20px;
+    color: var(--muted);
+    min-height: 36px;
+    padding: 6px 4px;
+  }
+  .summary { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0 12px; }
+  .chip {
+    background: var(--accent-light);
+    color: #085041;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { padding: 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+  th { background: #f1efe8; font-weight: 600; font-size: 13px; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  td.lud { font-size: 18px; min-width: 150px; text-align: right; }
+  td input[type=number] { width: 56px; padding: 4px; font-size: 14px; }
+  .score { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .hint { display: block; font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .del { border: none; background: none; color: var(--muted); font-size: 18px; cursor: pointer; }
+  .empty { padding: 18px; color: var(--muted); text-align: center; font-size: 14px; }
 </style>
 </head>
 
 <body>
 <div class="card">
   <h1>Voice Typing</h1>
-  <p class="sub">Prototype 1 · Speak, and your words appear as text</p>
+  <p class="sub">Prototype 2 · Speak, and your words appear as text</p>
 
   <!-- Choose which language the "ears" should listen for -->
   <label for="lang">Language</label>
@@ -174,6 +226,45 @@
   <p class="note">
     Works in Google Chrome, with internet on.
     Your voice is sent to Google's speech service to be converted into text.
+  </p>
+</div>
+
+<!-- =================== EXPERIMENT MODE =================== -->
+<div class="card" id="experiment">
+  <h2>Experiment mode</h2>
+  <p class="sub">Type a Lisan ud Dawat sentence correctly, then speak it in each mode. The page scores how many words each mode got right.</p>
+
+  <label for="expectedText">1. The sentence you will say (written correctly)</label>
+  <textarea id="expectedText" class="lud" placeholder="Type the correct Lisan ud Dawat sentence here…"></textarea>
+  <div class="error" id="expectedError"></div>
+
+  <label>2. Tap a mode, then speak the sentence once</label>
+  <div class="test-buttons">
+    <button data-mode="ur">Test in Urdu</button>
+    <button data-mode="gu">Test in Gujarati</button>
+    <button data-mode="ar">Test in Arabic</button>
+  </div>
+  <div id="liveHeard" class="lud"></div>
+
+  <label>3. Results</label>
+  <div class="summary" id="summary"></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>#</th><th>Mode</th><th>You said</th><th>App typed</th><th>Words right</th><th>Score</th><th></th></tr>
+      </thead>
+      <tbody id="resultsBody"></tbody>
+    </table>
+  </div>
+
+  <div class="actions">
+    <button id="exportBtn">Save results (Excel / CSV)</button>
+    <button id="clearResultsBtn">Clear all results</button>
+  </div>
+  <p class="note">
+    Results are kept in this browser on this device until you clear them.
+    If a mode types in a different script (for example Gujarati letters), the page cannot compare
+    automatically. Check it yourself and type how many words were right.
   </p>
 </div>
 
@@ -378,6 +469,295 @@ document.getElementById('downloadBtn').addEventListener('click', () => {
   link.download = 'voice-text.txt';
   link.click();
 });
+
+/* =====================================================================
+   EXPERIMENT MODE (in plain words)
+   1. You type the correct sentence.
+   2. You tap a mode (Urdu / Gujarati / Arabic) and speak it once.
+   3. We compare what the app typed with what you typed, word by word.
+   4. Every attempt is saved in a results table you can download.
+   ===================================================================== */
+
+const MODES = {
+  ur: { code: 'ur-IN', name: 'Urdu' },
+  gu: { code: 'gu-IN', name: 'Gujarati' },
+  ar: { code: 'ar-SA', name: 'Arabic' },
+};
+const STORAGE_KEY = 'lud-experiment-results-v1';
+
+const expectedInput = document.getElementById('expectedText');
+const expectedError = document.getElementById('expectedError');
+const liveHeard     = document.getElementById('liveHeard');
+const resultsBody   = document.getElementById('resultsBody');
+const summaryEl     = document.getElementById('summary');
+const testButtons   = document.querySelectorAll('.test-buttons button');
+
+// ---- Keep results saved in this browser, so a page reload doesn't lose them ----
+function loadResults() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+  catch (e) { return []; }
+}
+function saveResults() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(results)); } catch (e) { /* storage blocked */ }
+}
+let results = loadResults();
+
+// ---- Make two texts comparable ----
+// Removes zabar/zer/pesh and similar marks, and treats different shapes of
+// the same letter as equal, so small spelling differences don't count as errors.
+function wordsOf(text) {
+  return text
+    .replace(/[ً-ٰٟـ]/g, '')   // harakat (vowel marks) and tatweel
+    .replace(/[أإآٱ]/g, 'ا')                        // different alif shapes → plain alif
+    .replace(/[يى]/g, 'ی')                          // different yeh shapes → one yeh
+    .replace(/ك/g, 'ک')                             // Arabic kaf → Urdu-style kaf
+    .replace(/[.,!?،؟؛:"'()\-]/g, ' ')              // punctuation → space
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+// Which writing system is this text in?
+function scriptOf(text) {
+  if (/[઀-૿]/.test(text)) return 'Gujarati';
+  if (/[ऀ-ॿ]/.test(text)) return 'Hindi';
+  if (/[؀-ۿݐ-ݿ]/.test(text)) return 'Arabic';
+  return 'Other';
+}
+
+// Counts how many of your words the app got right, in the right order.
+// (This method is called "longest common subsequence".)
+function countWordsRight(saidWords, heardWords) {
+  const rows = saidWords.length, cols = heardWords.length;
+  const table = Array.from({ length: rows + 1 }, () => new Array(cols + 1).fill(0));
+  for (let i = 1; i <= rows; i++) {
+    for (let j = 1; j <= cols; j++) {
+      table[i][j] = saidWords[i - 1] === heardWords[j - 1]
+        ? table[i - 1][j - 1] + 1
+        : Math.max(table[i - 1][j], table[i][j - 1]);
+    }
+  }
+  return table[rows][cols];
+}
+
+// ---- Run one test ----
+let testRunning = false;
+
+function runTest(modeKey, button) {
+  const said = expectedInput.value.trim();
+  if (!said) {
+    expectedError.textContent = 'Type the sentence you will say first.';
+    expectedInput.focus();
+    return;
+  }
+  if (!SpeechRecognition) {
+    expectedError.textContent = 'Speech recognition is not available. Please use Google Chrome.';
+    return;
+  }
+  if (testRunning) return;
+  if (isListening) stopListening();   // the main microphone must be off during a test
+
+  const mode = MODES[modeKey];
+  const tester = new SpeechRecognition();   // a separate "ear" just for this test
+  tester.lang = mode.code;
+  tester.continuous = false;                // one sentence only
+  tester.interimResults = true;
+
+  let heard = '';
+  let problem = null;
+
+  testRunning = true;
+  testButtons.forEach(b => b.disabled = (b !== button));
+  button.classList.add('running');
+  button.textContent = 'Listening… speak now';
+  liveHeard.textContent = '';
+  log('Experiment: testing in ' + mode.name + ' (' + mode.code + ')');
+
+  tester.onresult = (event) => {
+    let finalText = '', interimText = '';
+    for (let i = 0; i < event.results.length; i++) {
+      const piece = event.results[i][0].transcript.trim();
+      if (event.results[i].isFinal) finalText = piece;   // keep the latest final copy
+      else interimText += piece + ' ';
+    }
+    if (finalText) heard = finalText;
+    liveHeard.textContent = finalText || interimText;
+  };
+  tester.onnomatch = () => log('Experiment: heard sound but could not recognise words');
+  tester.onerror = (event) => {
+    log('Experiment error: ' + event.error);
+    if (event.error !== 'no-speech' && event.error !== 'aborted') problem = event.error;
+  };
+
+  tester.onend = () => {
+    testRunning = false;
+    testButtons.forEach(b => {
+      b.disabled = false;
+      b.classList.remove('running');
+      b.textContent = 'Test in ' + MODES[b.dataset.mode].name;
+    });
+
+    if (problem) {
+      expectedError.textContent = 'The test could not run (' + problem + '). Check the microphone permission and internet.';
+      return;
+    }
+    addResult(mode.name, said, heard);
+  };
+
+  try {
+    tester.start();
+  } catch (e) {
+    log('Experiment could not start: ' + e.message);
+    tester.onend();
+  }
+}
+
+function addResult(modeName, said, heard) {
+  const saidWords = wordsOf(said);
+  const sameScript = heard && scriptOf(heard) === scriptOf(said);
+
+  let right;
+  if (!heard) right = 0;                                      // nothing recognised
+  else if (sameScript) right = countWordsRight(saidWords, wordsOf(heard));
+  else right = null;                                          // different script → you decide
+
+  results.push({
+    id: Date.now(),
+    time: new Date().toLocaleString(),
+    mode: modeName,
+    said: said,
+    heard: heard,
+    right: right,
+    total: saidWords.length,
+  });
+  saveResults();
+  renderResults();
+  liveHeard.textContent = heard ? '' : '(nothing was recognised)';
+}
+
+// ---- Show the results table and the summary ----
+function scoreText(r) {
+  if (r.right === null || r.right === '' || !r.total) return '—';
+  return Math.round(Math.min(r.right, r.total) / r.total * 100) + '%';
+}
+
+function renderResults() {
+  resultsBody.innerHTML = '';
+
+  if (results.length === 0) {
+    resultsBody.innerHTML = '<tr><td colspan="7" class="empty">No tests yet. Type a sentence above and tap a mode.</td></tr>';
+  }
+
+  // Newest first
+  results.slice().reverse().forEach((r, idx) => {
+    const tr = document.createElement('tr');
+    const number = results.length - idx;
+
+    const cells = [
+      number,
+      r.mode,
+      r.said,
+      r.heard || '(nothing recognised)',
+    ];
+    cells.forEach((value, i) => {
+      const td = document.createElement('td');
+      td.textContent = value;                 // textContent keeps typed text safe
+      if (i === 2 || i === 3) td.className = 'lud';
+      tr.appendChild(td);
+    });
+
+    // Editable "words right" box
+    const rightTd = document.createElement('td');
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = 0;
+    input.max = r.total;
+    input.id = 'right-' + r.id;
+    input.value = r.right === null ? '' : r.right;
+    input.addEventListener('change', () => {
+      r.right = input.value === '' ? null : Math.max(0, Math.min(r.total, Number(input.value)));
+      saveResults();
+      renderResults();
+    });
+    rightTd.appendChild(input);
+    rightTd.appendChild(document.createTextNode(' / ' + r.total));
+    if (r.heard && scriptOf(r.heard) !== scriptOf(r.said)) {
+      const hint = document.createElement('span');
+      hint.className = 'hint';
+      hint.textContent = 'Different script. Check by eye.';
+      rightTd.appendChild(hint);
+    }
+    tr.appendChild(rightTd);
+
+    const scoreTd = document.createElement('td');
+    scoreTd.className = 'score';
+    scoreTd.textContent = scoreText(r);
+    tr.appendChild(scoreTd);
+
+    const delTd = document.createElement('td');
+    const del = document.createElement('button');
+    del.className = 'del';
+    del.textContent = '×';
+    del.setAttribute('aria-label', 'Delete this result');
+    del.addEventListener('click', () => {
+      results = results.filter(x => x.id !== r.id);
+      saveResults();
+      renderResults();
+    });
+    delTd.appendChild(del);
+    tr.appendChild(delTd);
+
+    resultsBody.appendChild(tr);
+  });
+
+  // Average score for each mode
+  summaryEl.innerHTML = '';
+  Object.values(MODES).forEach(mode => {
+    const scored = results.filter(r => r.mode === mode.name && r.right !== null && r.right !== '' && r.total);
+    if (scored.length === 0) return;
+    const right = scored.reduce((sum, r) => sum + Math.min(r.right, r.total), 0);
+    const total = scored.reduce((sum, r) => sum + r.total, 0);
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.textContent = mode.name + ': ' + Math.round(right / total * 100) + '% words right (' + scored.length + ' tests)';
+    summaryEl.appendChild(chip);
+  });
+}
+
+// ---- Buttons ----
+testButtons.forEach(button => {
+  button.addEventListener('click', () => runTest(button.dataset.mode, button));
+});
+expectedInput.addEventListener('input', () => { expectedError.textContent = ''; });
+
+// Save results as a CSV file that opens in Excel or Google Sheets
+document.getElementById('exportBtn').addEventListener('click', () => {
+  if (results.length === 0) {
+    expectedError.textContent = 'There are no results to save yet.';
+    return;
+  }
+  const quote = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const lines = [['No', 'Time', 'Mode', 'You said', 'App typed', 'Words right', 'Total words', 'Score']];
+  results.forEach((r, i) => {
+    lines.push([i + 1, r.time, r.mode, r.said, r.heard, r.right ?? '', r.total, scoreText(r)]);
+  });
+  const csv = '﻿' + lines.map(row => row.map(quote).join(',')).join('\r\n'); // ﻿ helps Excel show Arabic script
+  const file = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(file);
+  link.download = 'lud-experiment-results.csv';
+  link.click();
+});
+
+document.getElementById('clearResultsBtn').addEventListener('click', () => {
+  if (results.length === 0) return;
+  if (!confirm('Delete all experiment results? Save them first if you need them.')) return;
+  results = [];
+  saveResults();
+  renderResults();
+});
+
+renderResults();
 </script>
 </body>
 </html>
