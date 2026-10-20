@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice Typing – Prototype 1</title>
+
+<!-- A font that displays Arabic-script letters beautifully -->
+<link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;600&display=swap" rel="stylesheet">
+
+<style>
+  /* ---------- COLOURS & BASIC LOOK ---------- */
+  :root {
+    --bg: #f6f4ef;
+    --card: #ffffff;
+    --text: #22201c;
+    --muted: #7a766d;
+    --accent: #0f6e56;
+    --accent-light: #e1f5ee;
+    --danger: #c0392b;
+    --border: #e2ded4;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+  .card {
+    width: 100%;
+    max-width: 720px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+  }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; font-size: 14px; }
+
+  /* ---------- LANGUAGE PICKER ---------- */
+  label { font-size: 14px; color: var(--muted); }
+  select {
+    width: 100%;
+    padding: 10px;
+    margin: 6px 0 20px;
+    font-size: 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+  }
+
+  /* ---------- BIG MICROPHONE BUTTON ---------- */
+  .mic-wrap { text-align: center; margin-bottom: 12px; }
+  #micBtn {
+    width: 96px; height: 96px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: 40px;
+    cursor: pointer;
+    transition: transform .15s, background .2s;
+  }
+  #micBtn:hover { transform: scale(1.05); }
+  #micBtn.listening {
+    background: var(--danger);
+    animation: pulse 1.2s infinite;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(192,57,43,.5); }
+    100% { box-shadow: 0 0 0 22px rgba(192,57,43,0); }
+  }
+  #status { text-align: center; color: var(--muted); font-size: 14px; min-height: 20px; margin-bottom: 16px; }
+
+  /* ---------- TEXT AREA ---------- */
+  textarea {
+    width: 100%;
+    min-height: 220px;
+    padding: 14px;
+    font-family: "Noto Naskh Arabic", system-ui, sans-serif;
+    font-size: 22px;
+    line-height: 1.8;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    resize: vertical;
+  }
+  /* The grey "still guessing" text shown while you speak */
+  #interim {
+    font-family: "Noto Naskh Arabic", system-ui, sans-serif;
+    font-size: 20px;
+    color: var(--muted);
+    min-height: 34px;
+    padding: 6px 4px;
+  }
+
+  /* ---------- SMALL BUTTONS ---------- */
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .actions button {
+    flex: 1;
+    padding: 10px;
+    font-size: 15px;
+    border: 1px solid var(--border);
+    background: #fff;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .actions button:hover { background: var(--accent-light); }
+  .note { font-size: 12px; color: var(--muted); margin-top: 18px; line-height: 1.6; }
+
+  /* ---------- DIAGNOSTIC LOG (helps us find problems) ---------- */
+  #log {
+    margin-top: 16px;
+    background: #f1efe8;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-family: Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    max-height: 200px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+  }
+</style>
+</head>
+
+<body>
+<div class="card">
+  <h1>Voice Typing</h1>
+  <p class="sub">Prototype 1 · Speak, and your words appear as text</p>
+
+  <!-- Choose which language the "ears" should listen for -->
+  <label for="lang">Language</label>
+  <select id="lang">
+    <optgroup label="Arabic">
+      <option value="ar-SA">Arabic (Saudi Arabia)</option>
+      <option value="ar-EG">Arabic (Egypt)</option>
+      <option value="ar-AE">Arabic (UAE)</option>
+    </optgroup>
+    <optgroup label="Lisan ud Dawat experiment">
+      <option value="ur-IN">Urdu (India)</option>
+      <option value="ur-PK">Urdu (Pakistan)</option>
+      <option value="gu-IN">Gujarati</option>
+      <option value="hi-IN">Hindi</option>
+    </optgroup>
+    <optgroup label="Other">
+      <option value="en-IN">English (India)</option>
+    </optgroup>
+  </select>
+
+  <div class="mic-wrap">
+    <button id="micBtn" title="Start / stop listening">🎤</button>
+  </div>
+  <div id="status">Tap the microphone and start speaking</div>
+
+  <!-- Final, confirmed text goes here. You can also edit it by hand. -->
+  <textarea id="output" dir="rtl" placeholder="Your words will appear here…"></textarea>
+
+  <!-- Live "guessing" text while you are still speaking -->
+  <div id="interim" dir="rtl"></div>
+
+  <div class="actions">
+    <button id="copyBtn">Copy</button>
+    <button id="downloadBtn">Save as .txt</button>
+    <button id="clearBtn">Clear</button>
+  </div>
+
+  <div><strong style="font-size:13px">What's happening (diagnostic log):</strong></div>
+  <div id="log"></div>
+
+  <p class="note">
+    Works in Google Chrome, with internet on.
+    Your voice is sent to Google's speech service to be converted into text.
+  </p>
+</div>
+
+<script>
+/* =====================================================================
+   HOW THIS PAGE WORKS (in plain words)
+   1. We borrow the browser's built-in "ears" (speech recognition).
+   2. We tell it which language to listen for.
+   3. While you speak, it keeps sending us its best guess (grey text).
+   4. When it is confident, it sends the final words, and we add them
+      to the big text box.
+   ===================================================================== */
+
+// ---- STEP 1: Find the parts of the page we will control ----
+const micBtn      = document.getElementById('micBtn');
+const statusEl    = document.getElementById('status');
+const output      = document.getElementById('output');
+const interimEl   = document.getElementById('interim');
+const langSelect  = document.getElementById('lang');
+
+// ---- DIAGNOSTIC LOG: writes each step on screen with the time ----
+const logEl = document.getElementById('log');
+function log(message) {
+  const time = new Date().toLocaleTimeString();
+  logEl.textContent += time + '  ' + message + '\n';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// ---- Basic checks: where is this page running? ----
+const isEdge = navigator.userAgent.includes('Edg/');
+log('Page address type: ' + location.protocol);
+log('Browser: ' + (isEdge ? 'Microsoft Edge' : navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Other'));
+if (window.self !== window.top) {
+  log('⚠️ This page is shown inside another app (preview). The microphone may be blocked here. Open it directly in Chrome.');
+}
+if (isEdge) {
+  log('⚠️ Edge often fails at speech recognition. Please use Google Chrome.');
+}
+
+// ---- STEP 2: Get the browser's built-in "ears" ----
+// Chrome calls it "webkitSpeechRecognition", so we check both names.
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+if (!SpeechRecognition) {
+  statusEl.textContent = '❌ This browser cannot do speech recognition. Please open this page in Google Chrome.';
+  log('❌ Speech recognition is NOT available in this browser.');
+  micBtn.disabled = true;
+} else {
+  log('✅ Speech recognition is available.');
+}
+
+const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+let isListening = false;   // Are we supposed to be listening right now?
+
+if (recognition) {
+  recognition.continuous = true;      // keep listening, don't stop after one sentence
+  recognition.interimResults = true;  // show "guessing" text while speaking
+  recognition.lang = langSelect.value;
+
+  // ---- These tell us how far the process gets ----
+  recognition.onstart       = () => log('✅ Listening started');
+  recognition.onaudiostart  = () => log('✅ Microphone is giving sound');
+  recognition.onspeechstart = () => log('✅ Speech detected (it hears your voice)');
+  recognition.onnomatch     = () => log('⚠️ Heard sound but could not recognise words');
+
+  // ---- STEP 3: What to do each time the ears hear something ----
+  recognition.onresult = (event) => {
+    log('✅ Got words from the speech service');
+    let interimText = '';
+
+    // The browser sends a list of results; we look at the new ones only.
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const piece = event.results[i][0].transcript;   // the words it heard
+
+      if (event.results[i].isFinal) {
+        // Confident → add to the main text box
+        output.value += piece.trim() + ' ';
+      } else {
+        // Still guessing → show in grey below
+        interimText += piece;
+      }
+    }
+    interimEl.textContent = interimText;
+  };
+
+  // ---- STEP 4: Handle problems in a friendly way ----
+  recognition.onerror = (event) => {
+    log('❌ Error: ' + event.error);
+    if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+      statusEl.textContent = '⚠️ Microphone permission was blocked. Click the icon at the left of the address bar and allow the microphone.';
+      stopListening();
+    } else if (event.error === 'audio-capture') {
+      statusEl.textContent = '⚠️ No microphone found. Check that a microphone is connected and selected.';
+      stopListening();
+    } else if (event.error === 'network') {
+      statusEl.textContent = '⚠️ Could not reach the speech service. Check internet, and use Google Chrome.';
+      stopListening();
+    } else if (event.error === 'language-not-supported') {
+      statusEl.textContent = '⚠️ This language is not supported on this device.';
+      stopListening();
+    }
+    // 'no-speech' just means silence – we ignore it and keep going.
+  };
+
+  // Chrome sometimes stops by itself after a long silence.
+  // If the user still wants to listen, we quietly start again.
+  recognition.onend = () => {
+    log('Listening ended');
+    if (isListening) {
+      try { recognition.start(); } catch (e) { log('Could not restart: ' + e.message); }
+    }
+  };
+}
+
+// ---- STEP 5: Start and stop ----
+function startListening() {
+  recognition.lang = langSelect.value;
+  log('Starting in language: ' + recognition.lang);
+  try {
+    recognition.start();
+  } catch (e) {
+    log('❌ Could not start: ' + e.message);
+    return;
+  }
+  isListening = true;
+  micBtn.classList.add('listening');
+  micBtn.textContent = '⏹';
+  statusEl.textContent = '🔴 Listening… speak now';
+}
+
+function stopListening() {
+  isListening = false;
+  if (recognition) recognition.stop();
+  micBtn.classList.remove('listening');
+  micBtn.textContent = '🎤';
+  interimEl.textContent = '';
+  if (!statusEl.textContent.startsWith('⚠️')) {
+    statusEl.textContent = 'Stopped. Tap the microphone to continue.';
+  }
+}
+
+micBtn.addEventListener('click', () => {
+  statusEl.textContent = '';
+  isListening ? stopListening() : startListening();
+});
+
+// ---- STEP 6: Changing language ----
+// Arabic and Urdu are written right-to-left; Gujarati, Hindi, English left-to-right.
+function updateDirection() {
+  const rtl = langSelect.value.startsWith('ar') || langSelect.value.startsWith('ur');
+  output.dir = rtl ? 'rtl' : 'ltr';
+  interimEl.dir = rtl ? 'rtl' : 'ltr';
+}
+langSelect.addEventListener('change', () => {
+  updateDirection();
+  if (isListening) {          // restart with the new language
+    stopListening();
+    setTimeout(startListening, 300);
+  }
+});
+updateDirection();
+
+// ---- STEP 7: The small helper buttons ----
+document.getElementById('copyBtn').addEventListener('click', () => {
+  navigator.clipboard.writeText(output.value);
+  statusEl.textContent = '✅ Copied to clipboard';
+});
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  output.value = '';
+  interimEl.textContent = '';
+  statusEl.textContent = 'Cleared';
+});
+
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  const file = new Blob([output.value], { type: 'text/plain;charset=utf-8' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(file);
+  link.download = 'voice-text.txt';
+  link.click();
+});
+</script>
+</body>
+</html>
