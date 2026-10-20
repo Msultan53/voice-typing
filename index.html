@@ -228,33 +228,56 @@ if (!SpeechRecognition) {
 const recognition = SpeechRecognition ? new SpeechRecognition() : null;
 let isListening = false;   // Are we supposed to be listening right now?
 
+// Is this an Android phone? Chrome on Android repeats sentences in
+// "keep listening" mode, so on Android we listen one sentence at a time
+// and quietly restart after each one (see STEP 4, "onend").
+const isAndroid = /Android/i.test(navigator.userAgent);
+
+// The text that was already in the box when this round of listening began.
+// Each time new words arrive, we rebuild: savedText + what was heard now.
+// Rebuilding (instead of adding on) is what stops the repeats.
+let savedText = '';
+
 if (recognition) {
-  recognition.continuous = true;      // keep listening, don't stop after one sentence
-  recognition.interimResults = true;  // show "guessing" text while speaking
+  recognition.continuous = !isAndroid; // computer: keep listening; Android: one sentence per round
+  recognition.interimResults = true;   // show "guessing" text while speaking
   recognition.lang = langSelect.value;
+  log('Device: ' + (isAndroid ? 'Android phone (one-sentence mode)' : 'computer / other'));
 
   // ---- These tell us how far the process gets ----
-  recognition.onstart       = () => log('✅ Listening started');
+  recognition.onstart = () => {
+    savedText = output.value;          // remember what is already typed
+    log('✅ Listening started');
+  };
   recognition.onaudiostart  = () => log('✅ Microphone is giving sound');
   recognition.onspeechstart = () => log('✅ Speech detected (it hears your voice)');
   recognition.onnomatch     = () => log('⚠️ Heard sound but could not recognise words');
 
   // ---- STEP 3: What to do each time the ears hear something ----
   recognition.onresult = (event) => {
-    log('✅ Got words from the speech service');
+    let finalText = '';
     let interimText = '';
 
-    // The browser sends a list of results; we look at the new ones only.
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const piece = event.results[i][0].transcript;   // the words it heard
+    // Go through ALL results heard in this round, from the beginning,
+    // and build the text fresh every time. Nothing gets added twice.
+    for (let i = 0; i < event.results.length; i++) {
+      const piece = event.results[i][0].transcript.trim();   // the words it heard
+      if (!piece) continue;
 
       if (event.results[i].isFinal) {
-        // Confident → add to the main text box
-        output.value += piece.trim() + ' ';
+        // Confident words. On Android each round is one sentence, and the
+        // phone may send it more than once, so we keep only the latest copy.
+        finalText = isAndroid ? piece + ' ' : finalText + piece + ' ';
       } else {
-        // Still guessing → show in grey below
-        interimText += piece;
+        interimText += piece + ' ';    // still guessing
       }
+    }
+
+    if (finalText) {
+      // Add a space between old text and new text if needed
+      const gap = savedText && !savedText.endsWith(' ') ? ' ' : '';
+      output.value = savedText + gap + finalText;
+      log('✅ Got words: ' + finalText.trim());
     }
     interimEl.textContent = interimText;
   };
