@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lisan ud Dawat Voice Recorder</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f6f4ef;
+    --card: #ffffff;
+    --text: #22201c;
+    --muted: #7a766d;
+    --accent: #0f6e56;
+    --accent-light: #e1f5ee;
+    --accent-dark: #085041;
+    --danger: #c0392b;
+    --danger-light: #fbe9e7;
+    --warn: #8a5300;
+    --warn-light: #fdf1dc;
+    --border: #e2ded4;
+    --lud-font: "Noto Naskh Arabic", "Traditional Arabic", "Segoe UI", serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 20px 16px 48px;
+    line-height: 1.5;
+  }
+  main { max-width: 680px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 20px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 0 0 8px; display: flex; gap: 10px; align-items: center; }
+  .step-no {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--accent-light); color: var(--accent-dark); font-size: 14px; font-weight: 600;
+  }
+  .card.done .step-no { background: var(--accent); color: #fff; }
+  p { margin: 0 0 10px; }
+  .muted { color: var(--muted); font-size: 14px; }
+  .status { font-size: 14px; padding: 10px 12px; border-radius: 10px; background: #f1efe8; margin: 8px 0; }
+  .status.good { background: var(--accent-light); color: var(--accent-dark); }
+  .status.warn { background: var(--warn-light); color: var(--warn); }
+  .status.bad  { background: var(--danger-light); color: var(--danger); }
+
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  button {
+    font: inherit; font-size: 15px; padding: 11px 14px; border-radius: 10px; cursor: pointer;
+    border: 1px solid var(--accent); background: var(--accent); color: #fff;
+  }
+  button.secondary { background: #fff; color: var(--accent); }
+  button.danger { background: #fff; color: var(--danger); border-color: var(--danger); }
+  button:disabled { opacity: .45; cursor: default; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #9cc5b6; outline-offset: 2px; }
+  .row button { flex: 1; min-width: 120px; }
+
+  label.field { display: block; font-size: 14px; color: var(--muted); margin-top: 12px; }
+  input[type=text], select {
+    display: block; width: 100%; margin-top: 4px; padding: 10px; font-size: 16px;
+    border: 1px solid var(--border); border-radius: 8px; background: #fff;
+  }
+  label.check { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; font-size: 14px; }
+  label.check input { margin-top: 3px; width: 18px; height: 18px; flex-shrink: 0; }
+  .error { color: var(--danger); font-size: 13px; min-height: 18px; margin-top: 6px; }
+
+  /* Recording area */
+  .progress { height: 8px; background: #eeebe3; border-radius: 4px; overflow: hidden; margin: 6px 0 4px; }
+  .progress div { height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+  .counter { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .sentence {
+    font-family: var(--lud-font); direction: rtl; text-align: center;
+    font-size: 28px; line-height: 1.9; padding: 22px 12px; margin: 14px 0;
+    background: #faf9f5; border: 1px solid var(--border); border-radius: 12px;
+    min-height: 120px; display: flex; align-items: center; justify-content: center;
+    overflow-wrap: anywhere;
+  }
+  .sentence.recorded { border-color: var(--accent); background: var(--accent-light); }
+  .record-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 8px 0 14px; }
+  #recBtn {
+    width: 92px; height: 92px; border-radius: 50%; padding: 0;
+    font-size: 15px; font-weight: 600; border: none;
+  }
+  #recBtn.recording { background: var(--danger); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(192,57,43,.45); } 100% { box-shadow: 0 0 0 20px rgba(192,57,43,0); } }
+  @media (prefers-reduced-motion: reduce) { #recBtn.recording { animation: none; } }
+  .meter { width: 220px; height: 10px; border-radius: 5px; background: #eeebe3; overflow: hidden; }
+  .meter div { height: 100%; width: 0; background: var(--accent); }
+  #recTime { font-variant-numeric: tabular-nums; font-size: 14px; color: var(--muted); min-height: 20px; }
+  audio { width: 100%; margin-top: 6px; }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
+  .stat { border: 1px solid var(--border); border-radius: 10px; padding: 10px; text-align: center; }
+  .stat b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 12px; color: var(--muted); }
+  ol.tips { margin: 6px 0 0; padding-left: 20px; font-size: 14px; color: var(--muted); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+
+  <section class="card">
+    <h1>Lisan ud Dawat Voice Recorder</h1>
+    <p class="muted">Read sentences aloud to help build Lisan ud Dawat speech-to-text.
+      Recordings are kept on this phone until you save them as one file and send it to the project coordinator.</p>
+    <ol class="tips">
+      <li>Sit in a quiet room. Turn off fans if you can.</li>
+      <li>Hold the phone about a hand's length from your mouth.</li>
+      <li>Read naturally, at your normal speed. Small mistakes are fine; re-record if you stumble a lot.</li>
+    </ol>
+  </section>
+
+  <!-- STEP 1: Sentences -->
+  <section class="card" id="sentencesCard">
+    <h2><span class="step-no">1</span> Sentences to read</h2>
+    <div class="status" id="sentenceStatus">No sentences loaded yet.</div>
+    <div class="row">
+      <button id="loadSentencesBtn">Load sentence file</button>
+      <button id="exampleBtn" class="secondary">Try 5 example sentences</button>
+    </div>
+    <input type="file" id="sentenceFile" accept=".docx,.txt" hidden>
+    <p class="muted" style="margin-top:10px">A Word file (.docx) or text file (.txt) with <b>one sentence per line</b>.
+      Kanz al-Marjaan double typing (سس, ثث …) is converted automatically.
+      The sentences stay on this phone only.</p>
+  </section>
+
+  <!-- STEP 2: Speaker -->
+  <section class="card" id="speakerCard">
+    <h2><span class="step-no">2</span> About the speaker</h2>
+    <p class="muted">No names are recorded. Use a short code given by the coordinator, like S01.</p>
+    <label class="field" for="speakerCode">Speaker code</label>
+    <input type="text" id="speakerCode" placeholder="S01" maxlength="12" autocomplete="off">
+    <label class="field" for="gender">Gender</label>
+    <select id="gender">
+      <option value="">Choose…</option>
+      <option>Male</option>
+      <option>Female</option>
+    </select>
+    <label class="field" for="ageGroup">Age group</label>
+    <select id="ageGroup">
+      <option value="">Choose…</option>
+      <option>18–30</option>
+      <option>31–45</option>
+      <option>46–60</option>
+      <option>Over 60</option>
+    </select>
+    <label class="field" for="place">Home town (optional)</label>
+    <input type="text" id="place" placeholder="e.g. Nagpur" maxlength="40">
+    <label class="check">
+      <input type="checkbox" id="consent">
+      <span>I am 18 or older, and I agree that my voice recordings may be used to build and test
+        a Lisan ud Dawat speech-to-text system.</span>
+    </label>
+    <div class="error" id="speakerError"></div>
+    <div class="row" style="margin-top:8px"><button id="startBtn">Start recording</button></div>
+  </section>
+
+  <!-- STEP 3: Record -->
+  <section class="card" id="recordCard" hidden>
+    <h2><span class="step-no">3</span> Read and record</h2>
+    <div class="progress" aria-hidden="true"><div id="progressBar"></div></div>
+    <div class="counter"><span id="counterText"></span><span id="recordedText"></span></div>
+
+    <div class="sentence" id="sentenceBox"></div>
+
+    <div class="record-wrap">
+      <button id="recBtn" aria-label="Start recording">Record</button>
+      <div class="meter" aria-hidden="true"><div id="meterBar"></div></div>
+      <div id="recTime"></div>
+    </div>
+
+    <div class="status" id="qualityStatus" hidden></div>
+    <audio id="player" controls hidden></audio>
+
+    <div class="row" style="margin-top:12px">
+      <button id="prevBtn" class="secondary">Back</button>
+      <button id="skipBtn" class="secondary">Skip</button>
+      <button id="nextBtn">Save &amp; next</button>
+    </div>
+    <div class="error" id="recordError"></div>
+  </section>
+
+  <!-- STEP 4: Send -->
+  <section class="card" id="sendCard">
+    <h2><span class="step-no">4</span> Send your recordings</h2>
+    <div class="stats">
+      <div class="stat"><b id="statCount">0</b><span>recordings</span></div>
+      <div class="stat"><b id="statMinutes">0:00</b><span>minutes</span></div>
+      <div class="stat"><b id="statSize">0 MB</b><span>file size</span></div>
+    </div>
+    <div class="row">
+      <button id="exportBtn">Save recordings file (.zip)</button>
+      <button id="clearBtn" class="danger">Delete recordings from this phone</button>
+    </div>
+    <div class="status" id="exportStatus" hidden></div>
+    <p class="muted" style="margin-top:10px">The .zip file goes to your Downloads folder.
+      Send it to the coordinator by WhatsApp (as a <b>document</b>) or Google Drive.
+      After they confirm they received it, you can delete the recordings from this phone.</p>
+  </section>
+
+</main>
+
+<script>
+/* =====================================================================
+   HOW THIS PAGE WORKS (in plain words)
+   1. You load a list of sentences (kept on this phone only).
+   2. For each sentence you press Record, read it, and press Stop.
+   3. The recording is cleaned up (silence trimmed) and converted to the
+      format speech training needs: WAV, 16,000 samples per second, mono.
+   4. Recordings are saved inside this browser (IndexedDB), so nothing is
+      lost if you close the page.
+   5. At the end, everything is packed into ONE .zip file with a
+      spreadsheet (metadata.csv) listing which sentence each file contains.
+   ===================================================================== */
+
+const $ = (id) => document.getElementById(id);
+const RATE = 16000;   // samples per second used for speech training
+
+// ---------- Kanz al-Marjaan double typing → standard letters ----------
+// Same rules as the voice typing page (taken from the font itself).
+const KANZ_CODES = { 'ثث': 'پ', 'حح': 'چ', 'سس': 'ے', 'ضض': 'ٹ', 'طط': 'ں', 'ظظ': 'ه', 'كك': 'گ' };
+const KANZ_ANYWHERE = /ثث|حح|ضض|ظظ|كك/g;
+const KANZ_WORD_END = /(سس|طط)(?![ء-يٮ-ۓۺ-ۿݐ-ݿ])/g;
+function decodeKanz(text) {
+  return text.replace(KANZ_ANYWHERE, p => KANZ_CODES[p]).replace(KANZ_WORD_END, p => KANZ_CODES[p]);
+}
+
+// ---------- Small storage helpers (this phone only) ----------
+function getSaved(key, fallback) {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; }
+}
+function setSaved(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* storage blocked */ }
+}
+
+// Recordings are bigger, so they live in IndexedDB (the browser's built-in database)
+let dbPromise = null;
+function openDb() {
+  if (!dbPromise) {
+    dbPromise = new Promise((resolve, reject) => {
+      const req = indexedDB.open('lud-recorder', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('recordings', { keyPath: 'id' });
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  return dbPromise;
+}
+async function dbDo(mode, fn) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('recordings', mode);
+    const req = fn(tx.objectStore('recordings'));
+    tx.oncomplete = () => resolve(req && req.result);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+const dbPut    = (rec) => dbDo('readwrite', s => s.put(rec));
+const dbAll    = ()    => dbDo('readonly',  s => s.getAll());
+const dbClear  = ()    => dbDo('readwrite', s => s.clear());
+
+// =====================================================================
+// STEP 1: Sentences
+// =====================================================================
+const EXAMPLES = [
+  'مارا والد نو نام ملا فيروز چهے',
+  'ناگپور جمعية نا عامل صاحب گهنا نشاط سي خدمة كرے چهے',
+  'مارا دكري حسينة اسكول جائي چهے',
+  'سيدنا عالي قدر مفضل سيف الدين حق نا داعي چهے',
+  'ميں مستشفى ما مارا مريض دوست نے ملوا گيو',
+];
+
+let sentences = getSaved('rec-sentences', null);   // { name, list: [{ text, typed }] }
+
+// Read a .docx (it is a zip folder; the text is in word/document.xml)
+async function readDocxParagraphs(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const view = new DataView(bytes.buffer);
+  let end = -1;
+  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) {
+    if (view.getUint32(i, true) === 0x06054b50) { end = i; break; }
+  }
+  if (end < 0) throw new Error('This does not look like a Word (.docx) file.');
+  const entries = view.getUint16(end + 10, true);
+  let p = view.getUint32(end + 16, true);
+  const dec = new TextDecoder('utf-8');
+  for (let n = 0; n < entries; n++) {
+    const method = view.getUint16(p + 10, true), size = view.getUint32(p + 20, true);
+    const nameLen = view.getUint16(p + 28, true), extraLen = view.getUint16(p + 30, true);
+    const noteLen = view.getUint16(p + 32, true), offset = view.getUint32(p + 42, true);
+    const name = dec.decode(bytes.subarray(p + 46, p + 46 + nameLen));
+    if (name === 'word/document.xml') {
+      const start = offset + 30 + view.getUint16(offset + 26, true) + view.getUint16(offset + 28, true);
+      const data = bytes.subarray(start, start + size);
+      let xml;
+      if (method === 0) xml = dec.decode(data);
+      else {
+        const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+        xml = dec.decode(await new Response(stream).arrayBuffer());
+      }
+      const doc = new DOMParser().parseFromString(xml, 'application/xml');
+      const out = [];
+      for (const para of doc.getElementsByTagName('w:p')) {
+        let t = '';
+        for (const node of para.getElementsByTagName('*')) {
+          if (node.tagName === 'w:t') t += node.textContent;
+          else if (node.tagName === 'w:tab' || node.tagName === 'w:br') t += ' ';
+        }
+        out.push(t);
+      }
+      return out;
+    }
+    p += 46 + nameLen + extraLen + noteLen;
+  }
+  throw new Error('No text found inside this Word file.');
+}
+
+function cleanSentences(lines) {
+  const seen = new Set(), list = [];
+  for (const line of lines) {
+    const typed = line.replace(/\s+/g, ' ').trim();
+    if (!typed || !/[؀-ۿ]/.test(typed)) continue;     // skip empty or non-Arabic-script lines
+    const text = decodeKanz(typed);
+    if (seen.has(text)) continue;                               // skip duplicates
+    seen.add(text);
+    list.push({ text, typed: typed !== text ? typed : undefined });
+  }
+  return list;
+}
+
+function useSentences(name, list) {
+  sentences = { name, list };
+  setSaved('rec-sentences', sentences);
+  current = 0;
+  setSaved('rec-position', 0);
+  renderSentenceStatus();
+  if (!$('recordCard').hidden) showSentence();
+}
+
+function renderSentenceStatus() {
+  const el = $('sentenceStatus');
+  if (sentences && sentences.list.length) {
+    el.className = 'status good';
+    el.textContent = '✅ ' + sentences.list.length + ' sentences loaded from ' + sentences.name + '.';
+    $('sentencesCard').classList.add('done');
+  } else {
+    el.className = 'status';
+    el.textContent = 'No sentences loaded yet.';
+    $('sentencesCard').classList.remove('done');
+  }
+}
+
+$('loadSentencesBtn').addEventListener('click', () => $('sentenceFile').click());
+$('exampleBtn').addEventListener('click', () => useSentences('the 5 example sentences', cleanSentences(EXAMPLES)));
+$('sentenceFile').addEventListener('change', async () => {
+  const file = $('sentenceFile').files[0];
+  if (!file) return;
+  try {
+    const name = file.name.toLowerCase();
+    let lines;
+    if (name.endsWith('.docx')) lines = await readDocxParagraphs(file);
+    else if (name.endsWith('.txt')) lines = (await file.text()).split(/\r?\n/);
+    else throw new Error('Choose a .docx or .txt file. Old .doc files: open in Word and Save As .docx.');
+    const list = cleanSentences(lines);
+    if (!list.length) throw new Error('No Lisan ud Dawat sentences found in this file.');
+    useSentences(file.name, list);
+  } catch (e) {
+    $('sentenceStatus').className = 'status bad';
+    $('sentenceStatus').textContent = '⚠️ ' + e.message;
+  }
+  $('sentenceFile').value = '';
+});
+
+// =====================================================================
+// STEP 2: Speaker
+// =====================================================================
+const speaker = getSaved('rec-speaker', {});
+$('speakerCode').value = speaker.code || '';
+$('gender').value = speaker.gender || '';
+$('ageGroup').value = speaker.age || '';
+$('place').value = speaker.place || '';
+$('consent').checked = !!speaker.consent;
+
+['speakerCode', 'gender', 'ageGroup', 'place', 'consent'].forEach(id =>
+  $(id).addEventListener('input', () => { $('speakerError').textContent = ''; }));
+
+function readSpeaker() {
+  const code = $('speakerCode').value.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+  if (!sentences || !sentences.list.length) return 'Load the sentences first (step 1).';
+  if (!code) return 'Enter the speaker code, for example S01.';
+  if (!$('gender').value) return 'Choose the gender.';
+  if (!$('ageGroup').value) return 'Choose the age group.';
+  if (!$('consent').checked) return 'Please tick the agreement box to continue.';
+  Object.assign(speaker, {
+    code, gender: $('gender').value, age: $('ageGroup').value,
+    place: $('place').value.trim(), consent: true,
+  });
+  $('speakerCode').value = code;
+  setSaved('rec-speaker', speaker);
+  return null;
+}
+
+$('startBtn').addEventListener('click', () => {
+  const problem = readSpeaker();
+  if (problem) { $('speakerError').textContent = problem; return; }
+  $('speakerCard').classList.add('done');
+  $('recordCard').hidden = false;
+  showSentence();
+  $('recordCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+// =====================================================================
+// STEP 3: Record
+// =====================================================================
+let current = getSaved('rec-position', 0);
+let recordedIds = new Set();      // which sentences this speaker has recorded
+let pending = null;               // the recording just made, not yet saved
+let mediaRecorder = null, chunks = [], stream = null, audioCtx = null, meterTimer = null, startedAt = 0;
+
+const recId = (n) => speaker.code + '_' + String(n + 1).padStart(4, '0');
+
+async function refreshRecorded() {
+  const all = await dbAll();
+  recordedIds = new Set(all.filter(r => r.speaker === speaker.code).map(r => r.id));
+  renderStats(all);
+}
+
+function showSentence() {
+  const list = sentences.list;
+  current = Math.min(Math.max(0, current), list.length - 1);
+  setSaved('rec-position', current);
+  const done = recordedIds.has(recId(current));
+  $('sentenceBox').textContent = list[current].text;
+  $('sentenceBox').classList.toggle('recorded', done);
+  $('counterText').textContent = 'Sentence ' + (current + 1) + ' of ' + list.length;
+  const count = list.filter((_, i) => recordedIds.has(recId(i))).length;
+  $('recordedText').textContent = count + ' recorded' + (done ? ' · this one is done ✓' : '');
+  $('progressBar').style.width = (count / list.length * 100) + '%';
+  $('prevBtn').disabled = current === 0;
+  clearPending();
+}
+
+function clearPending() {
+  pending = null;
+  $('player').hidden = true;
+  $('player').removeAttribute('src');
+  $('qualityStatus').hidden = true;
+  $('recTime').textContent = '';
+  $('recordError').textContent = '';
+  $('nextBtn').textContent = recordedIds.has(recId(current)) ? 'Next' : 'Save & next';
+  $('nextBtn').disabled = !recordedIds.has(recId(current));
+}
+
+$('recBtn').addEventListener('click', () => {
+  if (mediaRecorder && mediaRecorder.state === 'recording') stopRecording();
+  else startRecording();
+});
+
+async function startRecording() {
+  $('recordError').textContent = '';
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: true },
+    });
+  } catch (e) {
+    $('recordError').textContent = e.name === 'NotAllowedError'
+      ? 'Microphone permission is blocked. Tap the icon left of the address bar and allow the microphone.'
+      : 'Could not use the microphone: ' + e.message;
+    return;
+  }
+  chunks = [];
+  mediaRecorder = new MediaRecorder(stream);
+  mediaRecorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+  mediaRecorder.onstop = processRecording;
+  mediaRecorder.start();
+  startedAt = Date.now();
+
+  // Live sound level meter, so the speaker can see the phone hears them
+  audioCtx = new AudioContext();
+  const analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 1024;
+  audioCtx.createMediaStreamSource(stream).connect(analyser);
+  const data = new Float32Array(analyser.fftSize);
+  meterTimer = setInterval(() => {
+    analyser.getFloatTimeDomainData(data);
+    let peak = 0;
+    for (const v of data) peak = Math.max(peak, Math.abs(v));
+    $('meterBar').style.width = Math.min(100, peak * 140) + '%';
+    $('recTime').textContent = 'Recording… ' + ((Date.now() - startedAt) / 1000).toFixed(1) + ' s';
+  }, 80);
+
+  $('recBtn').classList.add('recording');
+  $('recBtn').textContent = 'Stop';
+  $('recBtn').setAttribute('aria-label', 'Stop recording');
+  [$('prevBtn'), $('skipBtn'), $('nextBtn')].forEach(b => b.disabled = true);
+  $('qualityStatus').hidden = true;
+  $('player').hidden = true;
+}
+
+function stopRecording() {
+  mediaRecorder.stop();
+  clearInterval(meterTimer);
+  $('meterBar').style.width = '0';
+  stream.getTracks().forEach(t => t.stop());
+  if (audioCtx) audioCtx.close();
+  $('recBtn').classList.remove('recording');
+  $('recBtn').textContent = 'Record';
+  $('recBtn').setAttribute('aria-label', 'Start recording');
+  $('recTime').textContent = 'Processing…';
+}
+
+// Convert the recording to 16 kHz mono, trim silence, check quality
+async function processRecording() {
+  try {
+    const blob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+    const ctx = new AudioContext();
+    const decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
+    ctx.close();
+    const off = new OfflineAudioContext(1, Math.max(1, Math.ceil(decoded.duration * RATE)), RATE);
+    const src = off.createBufferSource();
+    src.buffer = decoded;
+    src.connect(off.destination);
+    src.start();
+    let samples = (await off.startRendering()).getChannelData(0);
+    samples = trimSilence(samples);
+
+    const quality = checkQuality(samples);
+    const wav = encodeWav(samples, RATE);
+    pending = { wav, seconds: samples.length / RATE, quality };
+
+    $('player').src = URL.createObjectURL(wav);
+    $('player').hidden = false;
+    $('recTime').textContent = pending.seconds.toFixed(1) + ' seconds. Listen, then save or record again.';
+    const q = $('qualityStatus');
+    q.hidden = false;
+    q.className = 'status ' + (quality.level === 'ok' ? 'good' : quality.level === 'warn' ? 'warn' : 'bad');
+    q.textContent = quality.message;
+    $('nextBtn').textContent = 'Save & next';
+    $('nextBtn').disabled = quality.level === 'bad';
+  } catch (e) {
+    $('recTime').textContent = '';
+    $('recordError').textContent = 'Could not process the recording: ' + e.message;
+  }
+  $('prevBtn').disabled = current === 0;
+  $('skipBtn').disabled = false;
+}
+
+// Keep a little silence (0.25 s) before and after the speech, remove the rest
+function trimSilence(s) {
+  const threshold = 0.02, pad = Math.round(0.25 * RATE);
+  let first = 0, last = s.length - 1;
+  while (first < s.length && Math.abs(s[first]) < threshold) first++;
+  while (last > first && Math.abs(s[last]) < threshold) last--;
+  if (first >= last) return s;
+  return s.slice(Math.max(0, first - pad), Math.min(s.length, last + pad));
+}
+
+function checkQuality(s) {
+  let peak = 0, clipped = 0;
+  for (const v of s) { const a = Math.abs(v); if (a > peak) peak = a; if (a > 0.98) clipped++; }
+  const seconds = s.length / RATE;
+  if (seconds < 0.6 || peak < 0.02) return { level: 'bad', message: '⚠️ No speech heard. Check the microphone and record again.' };
+  if (peak < 0.08) return { level: 'warn', message: 'Quite quiet. You can save it, but recording again a little closer would be better.' };
+  if (clipped / s.length > 0.002) return { level: 'warn', message: 'Some parts are too loud. You can save it, but recording again a little further away would be better.' };
+  if (seconds > 30) return { level: 'warn', message: 'This recording is very long. Make sure it is only this one sentence.' };
+  return { level: 'ok', message: '✅ Sounds good.' };
+}
+
+// WAV file: 16-bit PCM, mono
+function encodeWav(samples, rate) {
+  const buf = new ArrayBuffer(44 + samples.length * 2);
+  const v = new DataView(buf);
+  const text = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  text(0, 'RIFF'); v.setUint32(4, 36 + samples.length * 2, true); text(8, 'WAVE');
+  text(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  text(36, 'data'); v.setUint32(40, samples.length * 2, true);
+  for (let i = 0; i < samples.length; i++) {
+    const x = Math.max(-1, Math.min(1, samples[i]));
+    v.setInt16(44 + i * 2, x < 0 ? x * 0x8000 : x * 0x7fff, true);
+  }
+  return new Blob([buf], { type: 'audio/wav' });
+}
+
+$('nextBtn').addEventListener('click', async () => {
+  if (pending) {
+    const s = sentences.list[current];
+    await dbPut({
+      id: recId(current),
+      speaker: speaker.code, gender: speaker.gender, age: speaker.age, place: speaker.place,
+      number: current + 1, sentence: s.text, typed: s.typed || '',
+      seconds: Math.round(pending.seconds * 100) / 100,
+      quality: pending.quality.level,
+      time: new Date().toISOString(),
+      wav: pending.wav,
+    });
+    await refreshRecorded();
+  }
+  // Go to the next sentence that is not recorded yet
+  const list = sentences.list;
+  let next = current + 1;
+  while (next < list.length && recordedIds.has(recId(next))) next++;
+  if (next >= list.length) {
+    current = list.length - 1;
+    showSentence();
+    const remaining = list.filter((_, i) => !recordedIds.has(recId(i))).length;
+    $('recordError').textContent = remaining
+      ? 'End of the list. ' + remaining + ' skipped sentences are not recorded yet. Use Back to find them.'
+      : '🎉 All sentences are recorded. Please save the recordings file (step 4).';
+    return;
+  }
+  current = next;
+  showSentence();
+});
+$('skipBtn').addEventListener('click', () => {
+  if (current < sentences.list.length - 1) { current++; showSentence(); }
+});
+$('prevBtn').addEventListener('click', () => {
+  if (current > 0) { current--; showSentence(); }
+});
+
+// =====================================================================
+// STEP 4: Save everything as one .zip
+// =====================================================================
+function renderStats(all) {
+  const seconds = all.reduce((s, r) => s + r.seconds, 0);
+  const bytes = all.reduce((s, r) => s + r.wav.size, 0);
+  $('statCount').textContent = all.length;
+  $('statMinutes').textContent = Math.floor(seconds / 60) + ':' + String(Math.round(seconds % 60)).padStart(2, '0');
+  $('statSize').textContent = (bytes / 1048576).toFixed(1) + ' MB';
+  $('exportBtn').disabled = $('clearBtn').disabled = all.length === 0;
+}
+
+// CRC32 checksum, needed inside every zip file
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(bytes) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+// A simple zip (files stored without compression; WAV audio barely compresses anyway)
+function makeZip(files) {
+  const enc = new TextEncoder();
+  const parts = [], central = [];
+  let offset = 0;
+  const now = new Date();
+  const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+  const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+  for (const f of files) {
+    const name = enc.encode(f.name), data = f.data, crc = crc32(data);
+    const head = new DataView(new ArrayBuffer(30));
+    head.setUint32(0, 0x04034b50, true); head.setUint16(4, 20, true); head.setUint16(6, 0x0800, true);
+    head.setUint16(8, 0, true); head.setUint16(10, dosTime, true); head.setUint16(12, dosDate, true);
+    head.setUint32(14, crc, true); head.setUint32(18, data.length, true); head.setUint32(22, data.length, true);
+    head.setUint16(26, name.length, true); head.setUint16(28, 0, true);
+    parts.push(head.buffer, name, data);
+    const cd = new DataView(new ArrayBuffer(46));
+    cd.setUint32(0, 0x02014b50, true); cd.setUint16(4, 20, true); cd.setUint16(6, 20, true); cd.setUint16(8, 0x0800, true);
+    cd.setUint16(10, 0, true); cd.setUint16(12, dosTime, true); cd.setUint16(14, dosDate, true);
+    cd.setUint32(16, crc, true); cd.setUint32(20, data.length, true); cd.setUint32(24, data.length, true);
+    cd.setUint16(28, name.length, true); cd.setUint32(42, offset, true);
+    central.push(cd.buffer, name);
+    offset += 30 + name.length + data.length;
+  }
+  const cdSize = central.reduce((s, p) => s + p.byteLength, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+  end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+  return new Blob([...parts, ...central, end.buffer], { type: 'application/zip' });
+}
+
+$('exportBtn').addEventListener('click', async () => {
+  const status = $('exportStatus');
+  status.hidden = false;
+  status.className = 'status';
+  status.textContent = 'Preparing the file…';
+  try {
+    const all = (await dbAll()).sort((a, b) => a.id.localeCompare(b.id));
+    const quote = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+    const rows = [['file', 'sentence', 'sentence_as_typed', 'speaker', 'gender', 'age_group', 'home_town',
+                   'sentence_no', 'seconds', 'quality', 'recorded_at']];
+    const files = [];
+    for (const r of all) {
+      const file = 'audio/' + r.id + '.wav';
+      rows.push([file, r.sentence, r.typed, r.speaker, r.gender, r.age, r.place, r.number, r.seconds, r.quality, r.time]);
+      files.push({ name: file, data: new Uint8Array(await r.wav.arrayBuffer()) });
+    }
+    const csv = '﻿' + rows.map(row => row.map(quote).join(',')).join('\r\n');
+    const readme = 'Lisan ud Dawat voice recordings\r\n\r\n' +
+      'audio/        WAV files, 16,000 Hz, mono, 16-bit\r\n' +
+      'metadata.csv  which sentence each file contains, and speaker details (no names)\r\n\r\n' +
+      'Speakers agreed that these recordings may be used to build and test a\r\n' +
+      'Lisan ud Dawat speech-to-text system. Please keep them private.\r\n';
+    const enc = new TextEncoder();
+    files.unshift({ name: 'metadata.csv', data: enc.encode(csv) }, { name: 'README.txt', data: enc.encode(readme) });
+
+    const speakers = [...new Set(all.map(r => r.speaker))].join('-');
+    const date = new Date().toISOString().slice(0, 10);
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(makeZip(files));
+    link.download = 'lud-recordings-' + speakers + '-' + date + '.zip';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    status.className = 'status good';
+    status.textContent = '✅ Saved ' + link.download + ' (' + all.length + ' recordings) to your Downloads folder. Now send it to the coordinator.';
+  } catch (e) {
+    status.className = 'status bad';
+    status.textContent = '⚠️ Could not make the file: ' + e.message;
+  }
+});
+
+$('clearBtn').addEventListener('click', async () => {
+  if (!confirm('Delete ALL recordings from this phone? Only do this after the .zip file has been sent and received.')) return;
+  await dbClear();
+  await refreshRecorded();
+  if (!$('recordCard').hidden) showSentence();
+  $('exportStatus').hidden = false;
+  $('exportStatus').className = 'status';
+  $('exportStatus').textContent = 'Recordings deleted from this phone.';
+});
+
+// ---------- Start ----------
+if (!window.MediaRecorder || !navigator.mediaDevices) {
+  $('recordError').textContent = 'This browser cannot record audio. Please use Google Chrome.';
+}
+renderSentenceStatus();
+refreshRecorded().catch(e => { $('exportStatus').hidden = false; $('exportStatus').textContent = 'Storage problem: ' + e.message; });
+</script>
+</body>
+</html>
